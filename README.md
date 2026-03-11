@@ -1,34 +1,55 @@
-⚡ Energy ML Project — Smart Grid Machine Learning Platform
-A full end-to-end ML platform for smart grid energy data, featuring regression models,
-XGBoost/LightGBM forecasting, anomaly detection, and KMeans clustering — all visualized
-in an interactive Streamlit dashboard.
+# ⚡ GridSense-ML — Smart Grid Intelligence Platform
 
-📁 Project Structure
-energy-ml-project/
+> An end-to-end Machine Learning platform for smart grid energy analytics — featuring 
+> predictive load forecasting, anomaly detection, behavioural clustering, and a live 
+> interactive dashboard. Built to demonstrate production-grade ML engineering on real 
+> electrical grid data.
+
+---
+
+## 🏭 Industry Relevance
+
+Designed with real-world energy industry challenges in mind:
+
+| Challenge | Solution in GridSense-ML |
+|-----------|--------------------------|
+| Grid load prediction | XGBoost / LightGBM forecasting with 96-step horizon |
+| Fault & anomaly detection | Isolation Forest anomaly detection |
+| Grid behaviour segmentation | KMeans clustering (3 modes, k=2–5) |
+| Model comparison & governance | MLflow experiment tracking |
+| Operational dashboard | Streamlit real-time prediction interface |
+
+---
+
+## 📁 Project Structure
+
+```
+GridSense-ML/
 │
 ├── dashboard/
-│   └── app.py                  # Streamlit dashboard
+│   └── app.py                    # Streamlit dashboard (6 pages)
 │
 ├── data/
 │   └── raw/
-│       └── smart_grid.csv      # Raw grid data (not committed)
+│       └── smart_grid.csv        # Raw grid sensor data
 │
 ├── models/
-│   └── trained/                # Saved .pkl models (not committed)
+│   └── trained/                  # Serialised .pkl models
 │
-├── reports/                    # Generated CSVs (not committed)
+├── reports/                      # Generated experiment outputs
 │   ├── model_performance.csv
 │   ├── forecast_results_xgboost.csv
 │   ├── forecast_results_lightgbm.csv
+│   ├── forecast_model_results.csv
 │   ├── anomaly_results.csv
 │   ├── kmeans_cluster.csv
 │   └── clustering_results.csv
 │
 ├── scripts/
-│   ├── run_training.py         # Train regression models
-│   ├── run_forecasting.py      # Train XGBoost/LightGBM forecasts
-│   ├── run_anomaly_detection.py
-│   └── run_clustering.py       # KMeans clustering experiments
+│   ├── run_training.py           # Train regression models
+│   ├── run_forecasting.py        # Train XGBoost/LightGBM forecasts
+│   ├── run_anomaly_detection.py  # Anomaly detection pipeline
+│   └── run_clustering.py        # KMeans clustering experiments
 │
 ├── src/
 │   ├── data/
@@ -39,10 +60,10 @@ energy-ml-project/
 │   │   └── feature_builder.py
 │   ├── models/
 │   │   ├── supervised/
-│   │   │   ├── train.py        # Ridge, Lasso, ElasticNet, RF, GBM
-│   │   │   └── forecasting.py  # XGBoost, LightGBM
+│   │   │   ├── train.py          # Ridge, Lasso, ElasticNet, RF, GBM
+│   │   │   └── forecasting.py    # XGBoost, LightGBM (single/multi/rolling)
 │   │   └── unsupervised/
-│   │       └── clustering.py   # KMeans (baseline, feature_reduction, pca)
+│   │       └── clustering.py     # KMeans (baseline, feature_reduction, pca)
 │   ├── evaluation/
 │   │   └── reports.py
 │   ├── mlflow_tracking/
@@ -54,65 +75,120 @@ energy-ml-project/
 ├── .gitignore
 ├── README.md
 └── requirements.txt
+```
 
-🚀 Quick Start
-1. Clone the repo
-bashgit clone https://github.com/YOUR_USERNAME/energy-ml-project.git
-cd energy-ml-project
-2. Create virtual environment
-bashpython -m venv venv
-venv\Scripts\activate        # Windows
-# source venv/bin/activate   # Mac/Linux
-3. Install dependencies
-bashpip install -r requirements.txt
-4. Add your data
-Place smart_grid.csv in data/raw/
-5. Run the pipeline
-bash# Train regression models (Ridge, Lasso, ElasticNet, RF, GBM)
+---
+
+## 🚀 Quick Start
+
+### 1. Clone the repo
+```bash
+git clone https://github.com/YOUR_USERNAME/GridSense-ML.git
+cd GridSense-ML
+```
+
+### 2. Create virtual environment
+```bash
+python -m venv venv
+venv\Scripts\activate         # Windows
+# source venv/bin/activate    # Mac/Linux
+```
+
+### 3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Add your data
+Place `smart_grid.csv` in `data/raw/`
+
+### 5. Run the full pipeline
+```bash
+# 1. Regression models (Ridge, Lasso, ElasticNet, Random Forest, Gradient Boosting)
 python scripts/run_training.py
 
-# Train forecasting models (XGBoost, LightGBM)
+# 2. Forecasting (XGBoost, LightGBM — single step, multi-step, rolling)
 python scripts/run_forecasting.py
 
-# Run anomaly detection
+# 3. Anomaly detection
 python scripts/run_anomaly_detection.py
 
-# Run clustering experiments
+# 4. Clustering experiments (baseline, feature reduction, PCA — k=2 to 5)
 python scripts/run_clustering.py
-6. Launch dashboard
-bashstreamlit run dashboard/app.py
+```
 
-📊 Dashboard Pages
-PageDescriptionData ExplorerBrowse raw data, time series plots, column statsModel PerformanceCompare regression models — RMSE, R², MAE across 3 experimentsForecastingXGBoost vs LightGBM forecast vs actual, residuals, rolling windowsAnomaly DetectionScatter plot of detected anomalies, distribution statsClusteringKMeans results by mode (baseline/feature_reduction/pca), silhouette scoresReal-Time PredictionEnter grid parameters and get live load predictions
+### 6. Launch dashboard
+```bash
+streamlit run dashboard/app.py
+```
 
-🧪 Models
-Regression (Supervised)
+---
 
-Linear Regression, Ridge, Lasso, ElasticNet
-Random Forest, Gradient Boosting
-3 experiments: Baseline | Drop Power | Drop Electrical
+## 📊 Dashboard Pages
 
-Forecasting
+| Page | What You See |
+|------|-------------|
+| **Data Explorer** | Raw data browser, time series plots, column statistics |
+| **Model Performance** | RMSE / R² / MAE comparison across 3 experiments, feature importance |
+| **Forecasting** | XGBoost vs LightGBM — forecast vs actual, residuals, 96-step rolling windows |
+| **Anomaly Detection** | Scatter plot of grid anomalies, anomaly rate, flagged records |
+| **Clustering** | KMeans by mode & k, side-by-side mode comparison, silhouette score analysis |
+| **Real-Time Prediction** | Live load prediction — enter grid parameters, get instant output |
 
-XGBoost, LightGBM
-Single-step, multi-step (96-step horizon), rolling forecast
+---
 
-Clustering (Unsupervised)
+## 🧪 Models & Experiments
 
-KMeans with k=2..5
-3 modes: Baseline | Feature Reduction | PCA
+### Supervised — Regression
+| Model | Experiments |
+|-------|-------------|
+| Linear Regression | Baseline, Drop Power, Drop Electrical |
+| Ridge | Baseline, Drop Power, Drop Electrical |
+| Lasso | Baseline, Drop Power, Drop Electrical |
+| ElasticNet | Baseline, Drop Power, Drop Electrical |
+| Random Forest | Baseline, Drop Power, Drop Electrical |
+| Gradient Boosting | Baseline, Drop Power, Drop Electrical |
 
+### Supervised — Forecasting
+| Model | Strategy |
+|-------|----------|
+| XGBoost | Single-step, 96-step multi-step, rolling window |
+| LightGBM | Single-step, 96-step multi-step, rolling window |
 
-📦 Requirements
-See requirements.txt for full list. Key packages:
+### Unsupervised — Clustering
+| Mode | Features Used | k Range |
+|------|--------------|---------|
+| Baseline | Electrical signals (voltage, current, power) | 2–5 |
+| Feature Reduction | Energy + environmental features | 2–5 |
+| PCA | Dimensionality-reduced features | 2–5 |
 
-streamlit, plotly, pandas, numpy
-scikit-learn, xgboost, lightgbm
-mlflow, joblib
-statsmodels
+---
 
+## 🔬 MLflow Experiment Tracking
 
-🔬 MLflow Tracking
-All experiments are tracked with MLflow. To view:
-bashmlflow ui
-Then open http://localhost:5000
+All model runs are tracked with MLflow — parameters, metrics, and artifacts.
+
+```bash
+mlflow ui
+# Open http://localhost:5000
+```
+
+---
+
+## 📦 Tech Stack
+
+| Layer | Tools |
+|-------|-------|
+| Data Processing | pandas, numpy |
+| ML Models | scikit-learn, xgboost, lightgbm |
+| Time Series | statsmodels |
+| Experiment Tracking | MLflow |
+| Dashboard | Streamlit, Plotly |
+| Model Serialisation | joblib |
+
+---
+
+## 👤 Author
+
+Built as a demonstration of production-grade ML engineering applied to smart grid energy systems.  
+Open to collaboration with energy industry partners — Hitachi Energy, Siemens, ABB, and beyond.
