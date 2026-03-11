@@ -192,3 +192,4 @@ mlflow ui
 
 Built as a demonstration of production-grade ML engineering applied to smart grid energy systems.  
 Open to collaboration with energy industry partners — Hitachi Energy, Siemens, ABB, and beyond.
+GitHub: @RITIKPL1998
