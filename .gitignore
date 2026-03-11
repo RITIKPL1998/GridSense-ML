@@ -1,8 +1,51 @@
-__pycache__/
-*.pyc
-.env
-mlruns/
-data/
-models/
-logs/
+# ── Virtual environment ──────────────────────────
 venv/
+env/
+ENV/
+.venv/
+
+# ── Data (large files, regenerate locally) ───────
+data/
+
+# ── Trained models ────────────────────────────────
+models/
+
+# ── MLflow ────────────────────────────────────────
+mlruns/
+mlflow.db
+
+# ── Logs ──────────────────────────────────────────
+logs/
+*.log
+
+# ── Reports (generated outputs) ───────────────────
+reports/
+
+# ── Feature importance CSVs ───────────────────────
+*_feature_importance.csv
+
+# ── Python cache ──────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+
+# ── Jupyter ───────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── OS ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── Environment variables ─────────────────────────
+.env
