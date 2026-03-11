@@ -4,8 +4,8 @@ env/
 ENV/
 .venv/
 
-# ── Data (large files, regenerate locally) ───────
-data/
+
+
 
 # ── Trained models ────────────────────────────────
 models/trained/
