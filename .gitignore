@@ -8,7 +8,7 @@ ENV/
 data/
 
 # ── Trained models ────────────────────────────────
-models/
+models/trained/
 
 # ── MLflow ────────────────────────────────────────
 mlruns/
