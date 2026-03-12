@@ -117,7 +117,13 @@ if page == "Data Explorer":
     # --- time series chart ---
     if "timestamp" in df.columns and "power_consumption_kw" in df.columns:
         st.subheader("Power Consumption Over Time")
-        df_plot = df.sort_values("timestamp").iloc[::20]
+        df_plot = (
+            df.sort_values("timestamp")
+            .set_index("timestamp")
+            .resample("1H")
+            .mean()
+            .reset_index()
+        )
         fig = px.line(
             df_plot,
             x="timestamp",
