@@ -104,8 +104,16 @@ def train_regression_models(train_df, val_df, drop_power=False, drop_electrical=
             log_metrics({"rmse": rmse, "r2": r2, "mae": mae})
             log_model(model)
 
-            # save model locally
-            model_path = model_dir / f"{name}_model.pkl"
+            # save model locally — include experiment suffix so all 3
+            # experiments save separately and don't overwrite each other
+            if drop_electrical:
+                suffix = "no_electrical"
+            elif drop_power:
+                suffix = "no_power"
+            else:
+                suffix = "baseline"
+
+            model_path = model_dir / f"{name}_{suffix}.pkl"
             joblib.dump(model, model_path)
             print(f"Saved model to {model_path}")
 
@@ -119,7 +127,7 @@ def train_regression_models(train_df, val_df, drop_power=False, drop_electrical=
 
     reports_dir  = Path("reports")
     reports_dir.mkdir(exist_ok=True)
-    results_path = reports_dir / "model_results.csv"
+    results_path = reports_dir / "model_performance.csv"
 
     if results_path.exists():
         existing   = pd.read_csv(results_path)

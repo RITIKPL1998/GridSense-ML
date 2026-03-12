@@ -117,13 +117,7 @@ if page == "Data Explorer":
     # --- time series chart ---
     if "timestamp" in df.columns and "power_consumption_kw" in df.columns:
         st.subheader("Power Consumption Over Time")
-        df_plot = (
-            df.sort_values("timestamp")
-            .set_index("timestamp")
-            .resample("1H")
-            .mean()
-            .reset_index()
-        )
+        df_plot = df.sort_values("timestamp").iloc[::20]
         fig = px.line(
             df_plot,
             x="timestamp",
@@ -717,10 +711,11 @@ elif page == "Clustering":
         st.stop()
 
     # ── tabs ─────────────────────────────────────────────────────────
-    tab_c1, tab_c2, tab_c3 = st.tabs([
+    tab_c1, tab_c2, tab_c3, tab_c4 = st.tabs([
         "🔬 Explore by Mode & K",
         "📊 Mode Comparison",
         "🏆 Silhouette Scores",
+        "🎯 Cluster Predictor",
     ])
 
     # ================================================================
@@ -914,6 +909,187 @@ elif page == "Clustering":
                 use_container_width=True
             )
 
+    # ================================================================
+    # TAB C4 — Cluster Predictor
+    # ================================================================
+    with tab_c4:
+
+        st.subheader("🎯 Assign a New Grid Reading to a Cluster")
+
+        CLUSTER_MODELS_DIR = BASE_DIR / "models" / "cluster"
+
+        # ── find available model bundles ──────────────────────────────
+        bundle_files = list(CLUSTER_MODELS_DIR.glob("*.pkl")) if CLUSTER_MODELS_DIR.exists() else []
+
+        if not bundle_files:
+            st.warning(
+                "No cluster model bundles found.\n\n"
+                "Run `python scripts/run_clustering.py` first — "
+                "it will save a model bundle for each mode & k."
+            )
+        else:
+            # ── model selector ────────────────────────────────────────
+            bundle_names = [f.stem for f in bundle_files]
+
+            def bundle_label(stem):
+                # cluster_pca_k3 → PCA | k=3
+                parts = stem.replace("cluster_", "").rsplit("_k", 1)
+                mode_part = parts[0].replace("_", " ").title()
+                k_part    = parts[1] if len(parts) == 2 else "?"
+                return f"{mode_part} | k={k_part}"
+
+            label_map    = {bundle_label(b): b for b in bundle_names}
+            # default to pca_k3 if available
+            default_key  = next(
+                (k for k in label_map if "Pca" in k and "3" in k),
+                list(label_map.keys())[0]
+            )
+            default_idx  = list(label_map.keys()).index(default_key)
+            selected_bundle_label = st.selectbox(
+                "Select cluster model",
+                list(label_map.keys()),
+                index=default_idx
+            )
+            bundle_stem  = label_map[selected_bundle_label]
+            bundle_path  = CLUSTER_MODELS_DIR / f"{bundle_stem}.pkl"
+            bundle       = joblib.load(bundle_path)
+
+            features         = bundle["features"]
+            scaler           = bundle["scaler"]
+            pca_model        = bundle["pca"]
+            kmeans_model     = bundle["kmeans"]
+            n_clusters       = bundle["n_clusters"]
+            cluster_profiles = bundle.get("cluster_profiles", {})
+
+            st.info(
+                f"Model: **{selected_bundle_label}** | "
+                f"Features: **{len(features)}** | "
+                f"Clusters: **{n_clusters}** | "
+                f"Silhouette: **{bundle['silhouette']:.4f}**"
+            )
+
+            # ── feature config for smart defaults ────────────────────
+            FEAT_CONFIG = {
+                "power_consumption_kw":          ("Power Consumption (kW)",        0.0, 500.0,  50.0),
+                "reactive_power_kvar":           ("Reactive Power (kVAR)",         0.0, 200.0,  10.0),
+                "power_factor":                  ("Power Factor",                  0.0,   1.0,   0.9),
+                "solar_power_kw":                ("Solar Power (kW)",              0.0, 100.0,  10.0),
+                "wind_power_kw":                 ("Wind Power (kW)",               0.0, 100.0,   5.0),
+                "grid_supply_kw":                ("Grid Supply (kW)",              0.0, 100.0,  30.0),
+                "voltage_fluctuation_percent":   ("Voltage Fluctuation (%)",       0.0,  10.0,   1.0),
+                "temperature_c":                 ("Temperature (°C)",            -10.0,  50.0,  22.0),
+                "voltage_v":                     ("Voltage (V)",                 200.0, 260.0, 230.0),
+                "current_a":                     ("Current (A)",                   0.0, 100.0,  20.0),
+            }
+
+            st.subheader("Enter Grid Reading")
+            input_vals = {}
+            cols       = st.columns(2)
+            for i, feat in enumerate(features):
+                col = cols[i % 2]
+                if feat in FEAT_CONFIG:
+                    label, mn, mx, default = FEAT_CONFIG[feat]
+                else:
+                    label, mn, mx, default = feat.replace("_"," ").title(), 0.0, 1000.0, 0.0
+                input_vals[feat] = col.number_input(label, float(mn), float(mx), float(default), key=f"clust_{feat}")
+
+            if st.button("🔍 Assign to Cluster", type="primary"):
+
+                X_input = pd.DataFrame([input_vals])[features]
+
+                # scale
+                X_scaled = scaler.transform(X_input)
+
+                # pca if needed
+                if pca_model is not None:
+                    X_scaled = pca_model.transform(X_scaled)
+
+                # predict cluster
+                cluster_id = int(kmeans_model.predict(X_scaled)[0])
+
+                # ── cluster result display ────────────────────────────
+                profile = cluster_profiles.get(cluster_id, {
+                    "name":        f"Cluster {cluster_id}",
+                    "icon":        "🔵",
+                    "description": "No profile available.",
+                    "action":      "Review manually.",
+                    "color":       "blue",
+                })
+
+                color_map = {"green": "✅", "blue": "ℹ️", "orange": "⚠️", "red": "🚨"}
+                alert_icon = color_map.get(profile["color"], "🔵")
+
+                st.markdown(f"## {alert_icon} Assigned to **Cluster {cluster_id}**")
+
+                c1, c2 = st.columns(2)
+                c1.metric("Cluster ID",   cluster_id)
+                c2.metric("Cluster Name", f"{profile['icon']} {profile['name']}")
+
+                st.markdown(f"**What this means:** {profile['description']}")
+                st.markdown(f"**Recommended action:** {profile['action']}")
+
+                st.divider()
+
+                # ── similar past records from same cluster ────────────
+                st.subheader("📋 Similar Past Records from This Cluster")
+
+                cluster_file = REPORTS_DIR / f"kmeans_cluster_{bundle['mode']}_k{n_clusters}.csv"
+                if cluster_file.exists():
+                    hist_df = pd.read_csv(cluster_file)
+                    hist_df = clean_cols(hist_df)
+                    same_cluster = hist_df[hist_df["cluster"] == cluster_id]
+
+                    st.markdown(
+                        f"Found **{len(same_cluster):,}** historical records "
+                        f"in Cluster {cluster_id} "
+                        f"({len(same_cluster)/len(hist_df)*100:.1f}% of all data)"
+                    )
+
+                    # show feature stats for this cluster
+                    num_feat_cols = [c for c in features if c in hist_df.columns]
+                    st.subheader("Cluster Feature Statistics")
+                    stats = same_cluster[num_feat_cols].describe().round(3)
+                    st.dataframe(stats, use_container_width=True)
+
+                    # show sample records
+                    st.subheader("Sample Records")
+                    st.dataframe(
+                        same_cluster[num_feat_cols].sample(
+                            min(10, len(same_cluster)), random_state=42
+                        ).reset_index(drop=True),
+                        use_container_width=True
+                    )
+
+                    # compare input vs cluster mean
+                    st.subheader("Your Input vs Cluster Mean")
+                    compare_df = pd.DataFrame({
+                        "Feature":       num_feat_cols,
+                        "Your Input":    [input_vals.get(f, 0) for f in num_feat_cols],
+                        "Cluster Mean":  same_cluster[num_feat_cols].mean().round(3).values,
+                        "Cluster Std":   same_cluster[num_feat_cols].std().round(3).values,
+                    })
+                    st.dataframe(compare_df, use_container_width=True)
+
+                    fig_compare = px.bar(
+                        compare_df.melt(
+                            id_vars="Feature",
+                            value_vars=["Your Input", "Cluster Mean"],
+                            var_name="Source", value_name="Value"
+                        ),
+                        x="Feature", y="Value", color="Source",
+                        barmode="group",
+                        title=f"Your Input vs Cluster {cluster_id} Mean",
+                        color_discrete_map={
+                            "Your Input":   "#ff7f0e",
+                            "Cluster Mean": "#1f77b4"
+                        },
+                    )
+                    fig_compare.update_layout(xaxis_tickangle=-35)
+                    st.plotly_chart(fig_compare, use_container_width=True)
+
+                else:
+                    st.info(f"Historical data file not found at `{cluster_file}`.")
+
 # --------------------------------------------------
 # REAL-TIME PREDICTION
 # --------------------------------------------------
@@ -924,8 +1100,6 @@ elif page == "Real-Time Prediction":
 
     # ── locate models ──────────────────────────────
     model_files = list(MODEL_PATH.glob("*.pkl")) if MODEL_PATH.exists() else []
-
-    # fallback: try root models/ folder (old location)
     if not model_files:
         old_model_path = BASE_DIR / "models"
         model_files = list(old_model_path.glob("*.pkl"))
@@ -938,97 +1112,131 @@ elif page == "Real-Time Prediction":
         )
         st.stop()
 
-    model_names = [m.stem for m in model_files]
-    selected_model_name = st.selectbox("Select Model", model_names)
-    model_file = next(f for f in model_files if f.stem == selected_model_name)
-    model = joblib.load(model_file)
+    # ── only show baseline models (all features) ───
+    baseline_model_names = None
+    if RESULTS_PATH.exists():
+        res_meta = pd.read_csv(RESULTS_PATH)
+        res_meta = res_meta.drop_duplicates(
+            subset=["model","drop_power","drop_electrical"], keep="last"
+        )
+        baseline_names = res_meta[
+            (~res_meta["drop_power"].astype(bool)) &
+            (~res_meta["drop_electrical"].astype(bool))
+        ]["model"].tolist()
+        baseline_model_names = []
+        for mf in model_files:
+            for bm in baseline_names:
+                if mf.stem.startswith(bm):
+                    baseline_model_names.append(mf)
+                    break
 
-    # ── get expected feature count ─────────────────
-    n_features_expected = None
+    display_files    = baseline_model_names if baseline_model_names else model_files
+    model_name_stems = [m.stem for m in display_files]
+
+    # ── build friendly label: "Random Forest — Baseline (22 features)" ─
+    def model_label(stem):
+        label = stem.replace("_baseline", "").replace("_no_power", "").replace("_no_electrical", "")
+        label = label.replace("_", " ").title()
+        if "baseline" in stem:
+            label += " — Baseline"
+        elif "no_power" in stem:
+            label += " — No Power Feature"
+        elif "no_electrical" in stem:
+            label += " — No Electrical Features"
+        # legacy files like random_forest_model.pkl
+        elif stem.endswith("_model"):
+            label += " — (legacy)"
+        return label
+
+    label_to_file = {model_label(f.stem): f for f in display_files}
+    selected_label = st.selectbox("Select Model", list(label_to_file.keys()))
+    model_file     = label_to_file[selected_label]
+    model          = joblib.load(model_file)
+
+    # ── read EXACT features the model was trained on ──────────────────
     try:
-        n_features_expected = model.n_features_in_
+        expected_features = list(model.feature_names_in_)
     except AttributeError:
-        pass
+        expected_features = None
 
+    if expected_features is None:
+        st.error("Could not read feature names from this model. Please retrain.")
+        st.stop()
+
+    st.info(f"Model: **{selected_label}** | Features required: **{len(expected_features)}**")
+
+    # ── smart defaults per feature name ──────────────────────────────
+    FEATURE_CONFIG = {
+        # Raw electrical
+        "voltage_v":                       ("Voltage (V)",                    200.0, 260.0, 230.0),
+        "current_a":                       ("Current (A)",                      0.0, 100.0,  20.0),
+        "power_consumption_kw":            ("Power Consumption (kW)",           0.0, 500.0,  50.0),
+        "reactive_power_kvar":             ("Reactive Power (kVAR)",            0.0, 200.0,  10.0),
+        "power_factor":                    ("Power Factor",                     0.0,   1.0,   0.9),
+        # Renewable
+        "solar_power_kw":                  ("Solar Power (kW)",                 0.0, 100.0,  10.0),
+        "wind_power_kw":                   ("Wind Power (kW)",                  0.0, 100.0,   5.0),
+        "grid_supply_kw":                  ("Grid Supply (kW)",                 0.0, 100.0,  30.0),
+        # Environment
+        "temperature_c":                   ("Temperature (°C)",               -10.0,  50.0,  22.0),
+        "temperature_°c":                  ("Temperature (°C)",               -10.0,  50.0,  22.0),
+        "humidity_percent":                ("Humidity (%)",                     0.0, 100.0,  55.0),
+        # Grid health
+        "voltage_fluctuation_percent":     ("Voltage Fluctuation (%)",          0.0,  10.0,   1.0),
+        "overload_condition":              ("Overload Condition (0/1)",          0.0,   1.0,   0.0),
+        "electricity_price_usd_per_kwh":   ("Electricity Price (USD/kWh)",      0.0,   1.0,   0.1),
+        # Time
+        "hour":                            ("Hour of Day",                      0.0,  23.0,  12.0),
+        "day":                             ("Day of Month",                     1.0,  31.0,  15.0),
+        "month":                           ("Month",                            1.0,  12.0,   6.0),
+        "day_of_week":                     ("Day of Week (0=Mon)",              0.0,   6.0,   2.0),
+        "is_weekend":                      ("Is Weekend (0/1)",                 0.0,   1.0,   0.0),
+        # Lag features
+        "load_lag_1":                      ("Load 15 min ago (kW)",             0.0,1000.0,  50.0),
+        "load_lag_2":                      ("Load 30 min ago (kW)",             0.0,1000.0,  48.0),
+        "load_lag_4":                      ("Load 1 hr ago (kW)",               0.0,1000.0,  45.0),
+        "load_lag_8":                      ("Load 2 hrs ago (kW)",              0.0,1000.0,  42.0),
+        # Rolling
+        "rolling_mean_4":                  ("Rolling Mean 4 (kW)",              0.0,1000.0,  47.0),
+        "rolling_std_4":                   ("Rolling Std 4 (kW)",               0.0, 200.0,   3.0),
+    }
+
+    # ── dynamically build input form from model features ─────────────
     st.subheader("Enter Grid Parameters")
+    st.caption(f"All {len(expected_features)} features required by this model:")
 
-    # Raw sensor inputs (always available)
-    col1, col2 = st.columns(2)
-    voltage = col1.number_input("Voltage (V)",           200.0, 260.0, 230.0)
-    current = col2.number_input("Current (A)",             0.0, 100.0,  20.0)
-    solar   = col1.number_input("Solar Power (kW)",        0.0, 100.0,  10.0)
-    wind    = col2.number_input("Wind Power (kW)",         0.0, 100.0,   5.0)
-    grid_s  = col1.number_input("Grid Supply (kW)",        0.0, 100.0,   1.0)
-    power   = col2.number_input("Power Consumption (kW)",  0.0, 500.0,  50.0)
+    input_values = {}
+    cols = st.columns(2)
 
-    st.subheader("Time Context")
-    col3, col4 = st.columns(2)
-    hour        = col3.slider("Hour of Day",      0, 23, 12)
-    day_of_week = col4.slider("Day of Week (0=Mon, 6=Sun)", 0, 6, 2)
-    month       = col3.slider("Month",            1, 12,  6)
-    day         = col4.slider("Day of Month",     1, 31, 15)
-    is_weekend  = 1 if day_of_week >= 5 else 0
+    for i, feat in enumerate(expected_features):
+        col = cols[i % 2]
+        if feat in FEATURE_CONFIG:
+            label, mn, mx, default = FEATURE_CONFIG[feat]
+        else:
+            # unknown feature — show generic input
+            label   = feat.replace("_", " ").title()
+            mn, mx, default = 0.0, 1000.0, 0.0
 
-    st.subheader("Recent Load Context (for lag/rolling features)")
-    col5, col6 = st.columns(2)
-    lag1 = col5.number_input("Load 15 min ago (kW)",  0.0, 1000.0, 50.0)
-    lag2 = col6.number_input("Load 30 min ago (kW)",  0.0, 1000.0, 48.0)
-    lag4 = col5.number_input("Load 1 hr ago (kW)",    0.0, 1000.0, 45.0)
-    lag8 = col6.number_input("Load 2 hrs ago (kW)",   0.0, 1000.0, 42.0)
-    roll_mean = col5.number_input("Rolling Mean 4 (kW)", 0.0, 1000.0, 47.0)
-    roll_std  = col6.number_input("Rolling Std 4 (kW)",  0.0, 200.0,   3.0)
+        input_values[feat] = col.number_input(label, float(mn), float(mx), float(default), key=f"feat_{feat}")
 
     if st.button("⚡ Predict Load", type="primary"):
-
-        # Build full feature set matching feature_builder.py output
-        feature_dict = {
-            "voltage_v":            voltage,
-            "current_a":            current,
-            "solar_power_kw":       solar,
-            "wind_power_kw":        wind,
-            "grid_supply_kw":       grid_s,
-            "power_consumption_kw": power,
-            "hour":                 hour,
-            "day":                  day,
-            "month":                month,
-            "day_of_week":          day_of_week,
-            "is_weekend":           is_weekend,
-            "load_lag_1":           lag1,
-            "load_lag_2":           lag2,
-            "load_lag_4":           lag4,
-            "load_lag_8":           lag8,
-            "rolling_mean_4":       roll_mean,
-            "rolling_std_4":        roll_std,
-        }
-
-        features = pd.DataFrame([feature_dict])
-
-        # If model was trained without power/electrical, trim columns
-        if n_features_expected is not None and n_features_expected < len(features.columns):
-            # Try dropping power column first
-            try_drop = features.drop(columns=["power_consumption_kw"], errors="ignore")
-            if len(try_drop.columns) == n_features_expected:
-                features = try_drop
-            else:
-                try_drop2 = try_drop.drop(
-                    columns=["voltage_v", "current_a"], errors="ignore"
-                )
-                if len(try_drop2.columns) == n_features_expected:
-                    features = try_drop2
+        features = pd.DataFrame([input_values])
 
         try:
             prediction = model.predict(features)[0]
             st.success(f"### Predicted Load: **{prediction:.2f} kW**")
 
-            # Show input summary
-            with st.expander("Input features used"):
-                st.dataframe(features.T.rename(columns={0: "value"}),
-                             use_container_width=True)
+            # gauge-style metric display
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Predicted Load", f"{prediction:.2f} kW")
+            c2.metric("Model Used", selected_label)
+            c3.metric("Features Used", len(expected_features))
+
+            with st.expander("View all input features"):
+                st.dataframe(
+                    features.T.rename(columns={0: "Value"}).round(4),
+                    use_container_width=True
+                )
 
         except Exception as e:
             st.error(f"Prediction failed: {e}")
-            st.info(
-                f"Model expects **{n_features_expected}** features. "
-                f"We provided **{len(features.columns)}**.\n\n"
-                f"Features provided: {list(features.columns)}"
-            )
