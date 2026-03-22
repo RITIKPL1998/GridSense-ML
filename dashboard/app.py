@@ -620,7 +620,13 @@ elif page == "Forecasting":
 # ANOMALY DETECTION
 # --------------------------------------------------
 
+# --------------------------------------------------
+# ANOMALY DETECTION (OPTIMIZED)
+# --------------------------------------------------
+
 elif page == "Anomaly Detection":
+
+    import os
 
     st.header("🚨 Grid Anomaly Detection")
 
@@ -631,177 +637,179 @@ elif page == "Anomaly Detection":
         )
         st.stop()
 
-    # ── load with cache so it doesn't reload on every interaction ─────
+    # ── USER CONTROL (important) ───────────────────
+    max_rows = st.slider("Max rows to load", 1000, 50000, 15000)
+
+    # ── LOAD DATA (LIMITED) ───────────────────────
     @st.cache_data
-    def load_anomaly(path):
-        df = pd.read_csv(path)
+    def load_anomaly(path, nrows):
+        df = pd.read_csv(path, nrows=nrows)
+
         df = clean_cols(df)
+
         if "timestamp" in df.columns:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+
         return df
 
     with st.spinner("Loading anomaly data..."):
-        anomaly_df = load_anomaly(str(ANOMALY_PATH))
+        anomaly_df = load_anomaly(str(ANOMALY_PATH), max_rows)
 
-    # ── auto-detect columns ───────────────────────────────────────────
+    # ── AUTO DETECT COLUMNS ───────────────────────
     flag_col = next(
         (c for c in anomaly_df.columns if "anomaly" in c or "flag" in c or "label" in c),
         None
     )
+
     y_col = next(
         (c for c in anomaly_df.columns if "power" in c or "load" in c or "consumption" in c),
-        anomaly_df.select_dtypes("number").columns[0] if len(anomaly_df.select_dtypes("number").columns) else None
+        anomaly_df.select_dtypes("number").columns[0]
+        if len(anomaly_df.select_dtypes("number").columns)
+        else None
     )
 
-    if flag_col is None:
-        st.warning("Could not find an anomaly flag column. Showing raw data.")
+    if flag_col is None or y_col is None:
+        st.warning("Required columns not found. Showing sample data.")
         st.dataframe(anomaly_df.head(500), use_container_width=True)
         st.stop()
 
-    # ── summary metrics ───────────────────────────────────────────────
-    total     = len(anomaly_df)
-    is_anomaly = (anomaly_df[flag_col] != 0) if anomaly_df[flag_col].dtype != object \
-                 else (anomaly_df[flag_col] == "anomaly")
-    n_anomaly  = is_anomaly.sum()
+    # ── PRECOMPUTE (CRITICAL FIX) ─────────────────
+    anomaly_df["is_anomaly"] = (
+        (anomaly_df[flag_col] != 0)
+        if anomaly_df[flag_col].dtype != object
+        else (anomaly_df[flag_col] == "anomaly")
+    )
 
+    anomaly_only = anomaly_df[anomaly_df["is_anomaly"]]
+    normal_df = anomaly_df[~anomaly_df["is_anomaly"]]
+
+    total = len(anomaly_df)
+    n_anomaly = len(anomaly_only)
+
+    # ── METRICS ───────────────────────────────────
     col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Records",      f"{total:,}")
+    col1.metric("Total Records", f"{total:,}")
     col2.metric("Anomalies Detected", f"{n_anomaly:,}")
-    col3.metric("Normal Records",     f"{total - n_anomaly:,}")
-    col4.metric("Anomaly Rate",       f"{n_anomaly/total*100:.2f}%")
+    col3.metric("Normal Records", f"{total - n_anomaly:,}")
+    col4.metric("Anomaly Rate", f"{(n_anomaly/total*100):.2f}%")
 
-    # ── tabs ──────────────────────────────────────────────────────────
+    # ── TABS ──────────────────────────────────────
     tab_a1, tab_a2, tab_a3 = st.tabs([
-        "📈 Anomaly Timeline",
-        "🔵 Anomaly Distribution",
-        "📋 Anomaly Records",
+        "📈 Timeline",
+        "📊 Distribution",
+        "📋 Records",
     ])
 
+    # =========================================================
+    # 📈 TIMELINE
+    # =========================================================
     with tab_a1:
 
         st.subheader("Anomaly Timeline")
 
-        # ── SAMPLE for plotting — max 5000 normal + all anomalies ─────
-        # This is the key fix — never plot all rows at once
-        normal_df  = anomaly_df[~is_anomaly]
-        anomaly_only = anomaly_df[is_anomaly]
+        MAX_NORMAL = 2000
+        MAX_ANOMALY = 2000
 
-        MAX_NORMAL = 5000
-        if len(normal_df) > MAX_NORMAL:
-            normal_sample = normal_df.sample(MAX_NORMAL, random_state=42)
-        else:
-            normal_sample = normal_df
-
-        plot_df = pd.concat([normal_sample, anomaly_only]).sort_values(
-            "timestamp" if "timestamp" in anomaly_df.columns else anomaly_df.columns[0]
+        normal_sample = normal_df.sample(
+            min(len(normal_df), MAX_NORMAL), random_state=42
+        )
+        anomaly_sample = anomaly_only.sample(
+            min(len(anomaly_only), MAX_ANOMALY), random_state=42
         )
 
-        st.caption(
-            f"Showing {len(normal_sample):,} sampled normal points + "
-            f"all {len(anomaly_only):,} anomalies "
-            f"(from {total:,} total records)"
-        )
+        plot_df = pd.concat([normal_sample, anomaly_sample])
 
         x_col = "timestamp" if "timestamp" in plot_df.columns else plot_df.columns[0]
+
         fig = px.scatter(
             plot_df,
-            x=x_col, y=y_col,
-            color=flag_col,
+            x=x_col,
+            y=y_col,
+            color="is_anomaly",
             title="Detected Grid Anomalies",
-            color_discrete_map={
-                -1: "red", 0: "steelblue", 1: "red",
-                "anomaly": "red", "normal": "steelblue"
-            },
-            labels={
-                y_col:    y_col.replace("_", " ").title(),
-                flag_col: "Status"
-            },
+            color_discrete_map={True: "red", False: "steelblue"},
             opacity=0.6,
         )
+
         fig.update_traces(marker=dict(size=4))
         st.plotly_chart(fig, use_container_width=True)
 
-        # ── anomaly over time (line chart with count per day) ─────────
+        # ── LIGHTWEIGHT DAILY COUNT ───────────────
         if "timestamp" in anomaly_df.columns:
             st.subheader("Anomalies per Day")
-            daily = (
-                anomaly_df[is_anomaly]
-                .set_index("timestamp")
-                .resample("D")
-                .size()
-                .reset_index(name="anomaly_count")
-            )
-            if not daily.empty:
-                fig_daily = px.bar(
-                    daily, x="timestamp", y="anomaly_count",
-                    title="Daily Anomaly Count",
-                    labels={"timestamp": "Date", "anomaly_count": "Anomalies"},
-                    color_discrete_sequence=["#d62728"],
-                )
-                st.plotly_chart(fig_daily, use_container_width=True)
 
+            daily = anomaly_only.copy()
+
+            if len(daily) > 10000:
+                daily = daily.sample(10000, random_state=42)
+
+            daily["date"] = daily["timestamp"].dt.date
+            daily = daily.groupby("date").size().reset_index(name="count")
+
+            fig_daily = px.bar(
+                daily,
+                x="date",
+                y="count",
+                title="Daily Anomaly Count"
+            )
+
+            st.plotly_chart(fig_daily, use_container_width=True)
+
+    # =========================================================
+    # 📊 DISTRIBUTION
+    # =========================================================
     with tab_a2:
 
         col_pie, col_bar = st.columns(2)
 
-        dist = anomaly_df[flag_col].value_counts().reset_index()
+        dist = anomaly_df["is_anomaly"].value_counts().reset_index()
         dist.columns = ["label", "count"]
 
-        fig_pie = px.pie(
-            dist, names="label", values="count",
-            title="Normal vs Anomaly Split",
-            color_discrete_map={
-                -1: "red", 0: "steelblue", 1: "red",
-                "anomaly": "red", "normal": "steelblue"
-            }
-        )
+        fig_pie = px.pie(dist, names="label", values="count")
         col_pie.plotly_chart(fig_pie, use_container_width=True)
 
-        fig_bar = px.bar(
-            dist, x="label", y="count",
-            title="Record Count by Class",
-            color="label", text_auto=True,
-            color_discrete_map={
-                -1: "red", 0: "steelblue", 1: "red",
-                "anomaly": "red", "normal": "steelblue"
-            }
-        )
+        fig_bar = px.bar(dist, x="label", y="count", text_auto=True)
         col_bar.plotly_chart(fig_bar, use_container_width=True)
 
-        # ── feature comparison: anomaly vs normal ─────────────────────
-        st.subheader("Feature Comparison: Anomaly vs Normal")
+        # ── FEATURE COMPARISON ───────────────
+        st.subheader("Feature Comparison")
+
         num_cols = anomaly_df.select_dtypes("number").columns.tolist()
-        num_cols = [c for c in num_cols if c != flag_col]
+        num_cols = [c for c in num_cols if c not in [flag_col]]
 
         if num_cols:
             compare_stats = pd.DataFrame({
-                "Feature":      num_cols,
-                "Normal Mean":  anomaly_df[~is_anomaly][num_cols].mean().round(3).values,
-                "Anomaly Mean": anomaly_df[is_anomaly][num_cols].mean().round(3).values,
+                "Feature": num_cols,
+                "Normal Mean": normal_df[num_cols].mean().values,
+                "Anomaly Mean": anomaly_only[num_cols].mean().values,
             })
-            compare_stats["Difference %"] = (
-                (compare_stats["Anomaly Mean"] - compare_stats["Normal Mean"])
-                / (compare_stats["Normal Mean"].abs() + 1e-10) * 100
-            ).round(1)
+
             st.dataframe(compare_stats, use_container_width=True)
 
+    # =========================================================
+    # 📋 RECORDS
+    # =========================================================
     with tab_a3:
 
-        st.subheader(f"All {n_anomaly:,} Anomaly Records")
-        anomaly_rows = anomaly_df[is_anomaly].reset_index(drop=True)
+        st.subheader("Anomaly Records")
 
-        # paginate — show 500 at a time
-        page_size = 500
-        n_pages   = max(1, (len(anomaly_rows) - 1) // page_size + 1)
-        if n_pages > 1:
-            page_num = st.number_input("Page", 1, n_pages, 1)
-        else:
-            page_num = 1
+        page_size = 200
+        n_pages = max(1, (len(anomaly_only) - 1) // page_size + 1)
+
+        page_num = st.number_input("Page", 1, n_pages, 1)
 
         start = (page_num - 1) * page_size
-        end   = start + page_size
-        st.dataframe(anomaly_rows.iloc[start:end], use_container_width=True)
-        st.caption(f"Showing rows {start+1}–{min(end, len(anomaly_rows))} of {len(anomaly_rows):,}")
+        end = start + page_size
+
+        st.dataframe(
+            anomaly_only.iloc[start:end],
+            use_container_width=True
+        )
+
+        st.caption(
+            f"Showing {start+1}–{min(end, len(anomaly_only))} "
+            f"of {len(anomaly_only):,}"
+        )
 
 # --------------------------------------------------
 # CLUSTERING
