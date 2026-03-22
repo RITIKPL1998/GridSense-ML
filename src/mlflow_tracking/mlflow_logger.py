@@ -22,3 +22,5 @@ def log_metrics(metrics: dict):
 def log_model(model, artifact_path="model"):
 
     mlflow.sklearn.log_model(model, artifact_path)
+
+    
