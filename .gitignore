@@ -19,7 +19,7 @@ logs/
 *.log
 
 # ── Reports (generated outputs) ───────────────────
-reports/
+
 
 # ── Feature importance CSVs ───────────────────────
 *_feature_importance.csv

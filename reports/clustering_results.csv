@@ -1,0 +1,13 @@
+mode,n_clusters,silhouette_score,n_features,file,model_bundle
+baseline,2,0.2435189204855131,8,kmeans_cluster_baseline_k2.csv,cluster_baseline_k2.pkl
+baseline,3,0.2462445366917161,8,kmeans_cluster_baseline_k3.csv,cluster_baseline_k3.pkl
+baseline,4,0.1893694821453121,8,kmeans_cluster_baseline_k4.csv,cluster_baseline_k4.pkl
+baseline,5,0.1395992900680734,8,kmeans_cluster_baseline_k5.csv,cluster_baseline_k5.pkl
+feature_reduction,2,0.1937383088834395,7,kmeans_cluster_feature_reduction_k2.csv,cluster_feature_reduction_k2.pkl
+feature_reduction,3,0.1959234109229078,7,kmeans_cluster_feature_reduction_k3.csv,cluster_feature_reduction_k3.pkl
+feature_reduction,4,0.1507124625256958,7,kmeans_cluster_feature_reduction_k4.csv,cluster_feature_reduction_k4.pkl
+feature_reduction,5,0.141760911444376,7,kmeans_cluster_feature_reduction_k5.csv,cluster_feature_reduction_k5.pkl
+pca,2,0.3238588711284385,7,kmeans_cluster_pca_k2.csv,cluster_pca_k2.pkl
+pca,3,0.3366849284843081,7,kmeans_cluster_pca_k3.csv,cluster_pca_k3.pkl
+pca,4,0.2868382534261766,7,kmeans_cluster_pca_k4.csv,cluster_pca_k4.pkl
+pca,5,0.24663952562736585,7,kmeans_cluster_pca_k5.csv,cluster_pca_k5.pkl
