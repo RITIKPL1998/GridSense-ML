@@ -12,3 +12,4 @@ scipy
 statsmodels
 xgboost
 lightgbm
+plotly
